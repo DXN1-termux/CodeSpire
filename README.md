@@ -7,7 +7,7 @@ MADE WITH ❤️ BY DXN1
   <img src="https://img.shields.io/badge/Created_By-DXN1--termux-cyan?style=for-the-badge&logo=github&logoColor=white" alt="Author" />
   <img src="https://img.shields.io/badge/Platform-Termux_|_Linux_|_macOS_|_Windows-blueviolet?style=for-the-badge&logo=linux&logoColor=white" alt="Platform Support" />
   <img src="https://img.shields.io/badge/Secured_With-AES--GCM-brightgreen?style=for-the-badge&logo=snort&logoColor=white" alt="Security Vault" />
-  <img src="https://img.shields.io/badge/Engine-Gemini_3.5_Flash_|_Pro-deepskyblue?style=for-the-badge&logoColor=white" alt="AI Engine" />
+  <img src="https://img.shields.io/badge/Engine DXN1|_Pro-deepskyblue?style=for-the-badge&logoColor=white" alt="AI Engine" />
   <img src="https://img.shields.io/badge/Status-Stable-9cc728?style=for-the-badge" alt="Build Status" />
 </p>
 
