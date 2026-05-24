@@ -1,4 +1,4 @@
-MADE WITH ❤️ BY DXN1
+<p align="center" MADE WITH ❤️ BY DXN1 >
 
 # CodeSpire (v1e-PRO) ⚙️ 🛰️
 
