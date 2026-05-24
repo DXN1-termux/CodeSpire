@@ -1,0 +1,317 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Send, 
+  Terminal, 
+  Trash2, 
+  Code, 
+  Globe, 
+  Cpu, 
+  User, 
+  ShieldCheck,
+  ChevronRight,
+  Info,
+  Server
+} from 'lucide-react';
+import { Message, TerminalLog, CodeSpireConfig } from '../types';
+
+interface TuiTerminalProps {
+  logs: TerminalLog[];
+  messages: Message[];
+  activeModel: string;
+  config: CodeSpireConfig;
+  onAddLog: (msg: string, type: 'info' | 'success' | 'warning' | 'error' | 'agent' | 'command') => void;
+  onClearLogs: () => void;
+  onSendMessage: (text: string) => Promise<void>;
+  onSetConfig: (updater: (prev: CodeSpireConfig) => CodeSpireConfig) => void;
+  onTriggerAgent: (goal: string) => void;
+}
+
+export default function TuiTerminal({
+  logs,
+  messages,
+  activeModel,
+  config,
+  onAddLog,
+  onClearLogs,
+  onSendMessage,
+  onSetConfig,
+  onTriggerAgent
+}: TuiTerminalProps) {
+  const [inputVal, setInputVal] = useState('');
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  
+  // Auto-scroll when logs update
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  // Handle terminal command parsing
+  const executeCommand = async (cmdStr: string) => {
+    const trimmed = cmdStr.trim();
+    if (!trimmed) return;
+
+    // Save to history
+    setCommandHistory(prev => [trimmed, ...prev.slice(0, 49)]);
+    setHistoryIndex(-1);
+
+    onAddLog(`$ ${trimmed}`, 'command');
+
+    // Parse commands starting with '/' or custom format
+    if (trimmed.startsWith('/')) {
+      const parts = trimmed.split(' ');
+      const command = parts[0].toLowerCase();
+      const args = parts.slice(1).join(' ');
+
+      switch (command) {
+        case '/help':
+          onAddLog(`================================================================`, 'info');
+          onAddLog(`  CodeSpire CLI COMMAND REFERENCE SYSTEM`, 'success');
+          onAddLog(`================================================================`, 'info');
+          onAddLog(`/help               - Show this cryptographic command helper`, 'info');
+          onAddLog(`/sysinfo            - Gather and diagnose local/remote environment details`, 'info');
+          onAddLog(`/setkey <key>       - Live encrypted storage registry override`, 'info');
+          onAddLog(`/model <name>       - Switch active AI brain (flash, pro, lite)`, 'info');
+          onAddLog(`/search <query>     - Trigger autonomous Gemini Web Grounding search`, 'info');
+          onAddLog(`/agent <goal>       - Boot full-autonomous developer workflow loops`, 'info');
+          onAddLog(`/write <file> <txt> - Output persistent files straight to filesystem`, 'info');
+          onAddLog(`/clear              - Empty the terminal standard output logs`, 'info');
+          onAddLog(`[Any normal prompt] - Query the active neural chat model directly`, 'info');
+          onAddLog(`================================================================`, 'info');
+          break;
+
+        case '/sysinfo':
+          onAddLog(`[INIT] Running environment diagnostics...`, 'info');
+          try {
+            const res = await fetch('/api/workspace/execute-workflow', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'sys-diagnose' })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+              const lines = data.output.split('\n');
+              lines.forEach((line: string) => onAddLog(line, 'info'));
+            } else {
+              onAddLog(`Diagnosis pipeline error: ${data.message}`, 'error');
+            }
+          } catch (err: any) {
+            onAddLog(`Environment probe failed: ${err?.message || err}`, 'error');
+          }
+          break;
+
+        case '/setkey':
+          if (!args) {
+            onAddLog(`Error: Please specify key content. Usage: /setkey <GEMINI_API_KEY>`, 'error');
+          } else {
+            // Decrypt key with standard master key to secure passphrase if set, otherwise save directly in local storage encrypted
+            onAddLog(`Encrypting and storing key in secure dashboard registry...`, 'info');
+            onSetConfig(prev => ({
+              ...prev,
+              encryptedGeminiKey: args, // App component handles real encryption mapping with Master Key
+            }));
+            onAddLog(`API Key updated successfully and local-stored with high-grade lock!`, 'success');
+          }
+          break;
+
+        case '/model':
+          const target = args.trim().toLowerCase();
+          if (!target) {
+            onAddLog(`Current model: ${activeModel}. Available aliases: 'flash' (gemini-3.5-flash), 'pro' (gemini-3.1-pro-preview), 'lite' (gemini-3.1-flash-lite).`, 'info');
+          } else {
+            let modelId = 'gemini-3.5-flash';
+            if (target === 'pro' || target.includes('pro')) modelId = 'gemini-3.1-pro-preview';
+            if (target === 'lite' || target.includes('lite')) modelId = 'gemini-3.1-flash-lite';
+            
+            onSetConfig(prev => ({ ...prev, activeModel: modelId }));
+            onAddLog(`Switched active development LLM -> ${modelId}`, 'success');
+          }
+          break;
+
+        case '/search':
+          if (!args) {
+            onAddLog(`Error: What are you searching for? Usage: /search <query>`, 'error');
+          } else {
+            onAddLog(`Starting neural search web-scraper for: "${args}"`, 'agent');
+            onSendMessage(`/search ${args}`); // Forward search behavior triggers to messaging pipeline with flag
+          }
+          break;
+
+        case '/agent':
+          if (!args) {
+            onAddLog(`Error: Autonomous loop needs a clear prompt focus. Usage: /agent <goal>`, 'error');
+          } else {
+            onTriggerAgent(args);
+          }
+          break;
+
+        case '/write':
+          const splitIdx = args.indexOf(' ');
+          if (splitIdx === -1) {
+            onAddLog(`Usage: /write <file-path> <content>`, 'error');
+          } else {
+            const fPath = args.substring(0, splitIdx);
+            const fContent = args.substring(splitIdx + 1);
+            try {
+              onAddLog(`Exporting source blocks to: ${fPath}...`, 'info');
+              const response = await fetch('/api/workspace/write-file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filePath: fPath, content: fContent })
+              });
+              const data = await response.json();
+              if (data.status === 'success') {
+                onAddLog(`FS write success: Written file outputs perfectly!`, 'success');
+              } else {
+                onAddLog(`FS write failed: ${data.message}`, 'error');
+              }
+            } catch (err: any) {
+              onAddLog(`File export crashed: ${err?.message || err}`, 'error');
+            }
+          }
+          break;
+
+        case '/clear':
+          onClearLogs();
+          onAddLog(`Terminal buffer cleared.`, 'info');
+          break;
+
+        default:
+          onAddLog(`Command not recognized: "${command}". Type /help for full dashboard capabilities.`, 'error');
+      }
+    } else {
+      // Direct message/prompt workflow
+      await onSendMessage(trimmed);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const val = inputVal;
+      setInputVal('');
+      executeCommand(val);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (historyIndex < commandHistory.length - 1) {
+        const nextIdx = historyIndex + 1;
+        setHistoryIndex(nextIdx);
+        setInputVal(commandHistory[nextIdx]);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex > 0) {
+        const nextIdx = historyIndex - 1;
+        setHistoryIndex(nextIdx);
+        setInputVal(commandHistory[nextIdx]);
+      } else if (historyIndex === 0) {
+        setHistoryIndex(-1);
+        setInputVal('');
+      }
+    }
+  };
+
+  // Helper styles for log lines
+  const getLogStyle = (type: string) => {
+    switch (type) {
+      case 'success':
+        return 'text-emerald-400 font-medium';
+      case 'warning':
+        return 'text-amber-400 font-medium';
+      case 'error':
+        return 'text-rose-500 font-bold border-l border-rose-500 pl-1.5';
+      case 'command':
+        return 'text-white font-bold tracking-wide border-b border-neutral-800 pb-0.5';
+      case 'agent':
+        return 'text-cyan-400 font-bold flex items-center gap-1 bg-cyan-950/20 py-0.5 px-1 rounded';
+      default:
+        return 'text-neutral-300';
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-neutral-950 border border-neutral-800/80 rounded-lg overflow-hidden font-mono shadow-xl relative select-none">
+      
+      {/* Terminal Title Bar */}
+      <div className="flex items-center justify-between px-3 py-2 bg-neutral-900 border-b border-neutral-800">
+        <div className="flex items-center gap-2">
+          <Terminal size={14} className="text-emerald-400" />
+          <span className="text-xs font-bold uppercase tracking-wider text-neutral-300">CodeSpire Direct TUI Console</span>
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-neutral-500">
+          <span className="px-1.5 py-0.5 bg-neutral-950 text-neutral-400 rounded border border-neutral-800/60 uppercase">
+            Platform: Termux / x86_64
+          </span>
+          <button 
+            type="button" 
+            onClick={onClearLogs}
+            className="flex items-center gap-1 hover:text-emerald-400 select-none cursor-pointer transition-colors"
+            title="Purge console records"
+          >
+            <Trash2 size={12} /> Clear
+          </button>
+        </div>
+      </div>
+
+      {/* Terminal logs viewer */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 select-text custom-scrollbar selection:bg-emerald-500/20 bg-neutral-950">
+        <div className="text-[11px] text-neutral-500 mb-2 border-b border-neutral-800/60 pb-2 select-none">
+          <div className="text-emerald-400 font-bold mb-1 font-sans text-xs">CodeSpire Automated CLI Development Client [v1.0.0-PRO]</div>
+          <div>DEVELOPER USER : DXN1-termux | CODESPIRE_SHELL: ON</div>
+          <div>TYPE <span className="text-emerald-400 font-semibold cursor-pointer" onClick={() => executeCommand('/help')}>/help</span> TO LIST CRYPTOGRAPHIC ASSISTANT WORKFLOW TOOLS</div>
+        </div>
+
+        {logs.map((log) => (
+          <div key={log.id} className="text-xs leading-relaxed break-all font-mono transition-all duration-150">
+            <span className="text-[10px] text-neutral-600 mr-2 shrink-0 select-none">[{log.timestamp}]</span>
+            <span className={getLogStyle(log.type)}>
+              {log.message}
+            </span>
+          </div>
+        ))}
+        <div ref={logsEndRef} />
+      </div>
+
+      {/* Terminal manual instructions bar */}
+      <div className="bg-neutral-900 border-t border-neutral-800/80 px-3 py-2 text-[10px] text-neutral-400 select-none flex justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-emerald-400">⚡ ACTIVE LLM:</span>
+          <span className="text-neutral-200 select-all font-bold">{config.activeModel}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-amber-500">BYOK:</span>
+          <span>{config.encryptedGeminiKey ? '🔒 LOCKED / STICKY' : '🔓 EMPTY (USES SYSTEM KEY)'}</span>
+        </div>
+      </div>
+
+      {/* Terminal Command Input Entry */}
+      <div className="bg-neutral-950 px-3 py-2.5 flex items-center gap-2 border-t border-neutral-800/85">
+        <span className="text-emerald-500 font-bold select-none text-xs flex items-center">
+          codespire<ChevronRight size={14} className="animate-pulse shrink-0 ml-0.5 text-emerald-400" />
+        </span>
+        <input
+          type="text"
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="flex-1 bg-transparent text-emerald-400 font-mono text-xs focus:outline-none selection:bg-emerald-500/30 selection:text-white"
+          placeholder="Type workflow commands or query Gemini... (try: /help or /sysinfo)"
+          spellCheck={false}
+          autoFocus
+        />
+        <button
+          onClick={() => {
+            const val = inputVal;
+            setInputVal('');
+            executeCommand(val);
+          }}
+          disabled={!inputVal.trim()}
+          className="p-1 px-1.5 hover:bg-emerald-500/10 hover:text-emerald-400 rounded text-neutral-500 transition-colors cursor-pointer select-none"
+        >
+          <Send size={14} />
+        </button>
+      </div>
+
+    </div>
+  );
+}

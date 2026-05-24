@@ -1,0 +1,6 @@
+{
+  "name": "CodeSpire",
+  "description": "A high-performance autonomous terminal AI, LLM client, and workflow automation hub built for developers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
