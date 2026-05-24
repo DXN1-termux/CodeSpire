@@ -128,6 +128,8 @@ export default function TuiTerminal({
           onAddLog(`================================================================`, 'info');
           onAddLog(`/help               - Show this diagnostic command helper`, 'info');
           onAddLog(`/sysinfo            - Diagnoses container, RAM load, operating CPU details`, 'info');
+          onAddLog(`/compile            - Run live TS compile & lint validation audit`, 'success');
+          onAddLog(`/read <file>        - Print safe sandbox file content with line indexes`, 'info');
           onAddLog(`/mutate <file> <qy> - Neural Refactor Core: edits, reviews & heals itself`, 'success');
           onAddLog(`/envs               - Audits, prints & tracks standard environmental flags`, 'info');
           onAddLog(`/packages           - Scans packages.json layout & shields dependencies`, 'info');
@@ -315,6 +317,55 @@ export default function TuiTerminal({
               }
             } catch (err: any) {
               onAddLog(`File export crashed: ${err?.message || err}`, 'error');
+            }
+          }
+          break;
+
+        case '/compile':
+          onAddLog(`[INIT] Invoking real-time TypeScript compilation audit...`, 'info');
+          try {
+            const res = await fetch('/api/workspace/execute-workflow', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'compile' })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+              const lines = data.output.split('\n');
+              lines.forEach((line: string) => onAddLog(line, data.success ? 'success' : 'error'));
+            } else {
+              onAddLog(`Compilation error: ${data.message}`, 'error');
+            }
+          } catch (err: any) {
+            onAddLog(`Compilation process crashed: ${err?.message || err}`, 'error');
+          }
+          break;
+
+        case '/read':
+          const targetFile = args.trim();
+          if (!targetFile) {
+            onAddLog(`Usage: /read <file-path>`, 'error');
+          } else {
+            onAddLog(`[READ-STREAM] Fetching file content: ${targetFile}...`, 'info');
+            try {
+              const response = await fetch('/api/workspace/read-file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filePath: targetFile })
+              });
+              const data = await response.json();
+              if (data.status === 'success') {
+                onAddLog(`=== FILE: ${targetFile} ===`, 'success');
+                const fileLines = data.content.split('\n');
+                fileLines.forEach((line: string, index: number) => {
+                  onAddLog(`${(index + 1).toString().padStart(3, ' ')} | ${line}`, 'info');
+                });
+                onAddLog(`=== END OF FILE ===`, 'success');
+              } else {
+                onAddLog(`Could not read file ${targetFile}: ${data.message}`, 'error');
+              }
+            } catch (err: any) {
+              onAddLog(`Read error: ${err?.message || err}`, 'error');
             }
           }
           break;

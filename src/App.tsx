@@ -33,6 +33,33 @@ import TuiTerminal from './components/TuiTerminal';
 const DEFAULT_SYSTEM_INSTRUCTION = `You are CodeSpire, an elite autonomous developer CLI model operating inside a secure container sandbox.
 Provide professional, raw terminal diagnostics, clear code changes, and clean shell/git guidelines.`;
 
+export const ENGINE_MODELS: Record<string, { id: string; name: string; tier: string }[]> = {
+  gemini: [
+    { id: 'gemini-2.5-flash', name: 'gemini-2.5-flash (Google General)', tier: 'Fast' },
+    { id: 'gemini-2.5-pro', name: 'gemini-2.5-pro (Deep Code Reasoner)', tier: 'High Reasoning' },
+    { id: 'gemini-2.0-flash', name: 'gemini-2.0-flash (Low latency)', tier: 'Fast' },
+    { id: 'gemini-3.5-flash', name: 'gemini-3.5-flash (Next-Gen coding)', tier: 'Advanced' },
+    { id: 'gemini-3.1-pro-preview', name: 'gemini-3.1-pro-preview (Advanced agent core)', tier: 'Advanced' }
+  ],
+  openai: [
+    { id: 'gpt-4o', name: 'gpt-4o (Omni旗舰 model)', tier: 'Advanced' },
+    { id: 'gpt-4o-mini', name: 'gpt-4o-mini (Speedy assistant)', tier: 'Fast' },
+    { id: 'o3-mini', name: 'o3-mini (Advanced logical reasoning)', tier: 'High Reasoning' },
+    { id: 'o1-mini', name: 'o1-mini (Specialist core reasoner)', tier: 'High Reasoning' }
+  ],
+  anthropic: [
+    { id: 'claude-3-5-sonnet-20241022', name: 'claude-3-5-sonnet (Flagship engineer)', tier: 'Advanced' },
+    { id: 'claude-3-5-haiku-20241022', name: 'claude-3-5-haiku (Rapid intelligence)', tier: 'Fast' },
+    { id: 'claude-3-opus-20240229', name: 'claude-3-opus (High rational reasoning)', tier: 'High Reasoning' }
+  ],
+  ollama: [
+    { id: 'llama3', name: 'llama3 (Standard Core generalist)', tier: 'offline' },
+    { id: 'mistral', name: 'mistral (Compact offline brain)', tier: 'offline' },
+    { id: 'deepseek-coder', name: 'deepseek-coder (Code generation core)', tier: 'offline' },
+    { id: 'gemma2', name: 'gemma2 (Google lightweight local)', tier: 'offline' }
+  ]
+};
+
 export default function App() {
   // Terminal logs state
   const [logs, setLogs] = useState<TerminalLog[]>([
@@ -346,14 +373,14 @@ export default function App() {
     }
   };
 
-  // Secure & encrypt Gemini Key
-  const handleSaveGeminiKey = async (e: React.FormEvent) => {
+  // Secure & encrypt API credentials dynamically based on active engine
+  const handleSaveActiveKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rawGeminiKey.trim()) {
-      addLog('Please enter a valid Gemini API key.', 'warning');
+      addLog('Credentials or parameters cannot be blank.', 'warning');
       return;
     }
-    const success = await saveRawApiKey(rawGeminiKey.trim(), 'gemini');
+    const success = await saveRawApiKey(rawGeminiKey.trim(), config.activeEngine);
     if (success) {
       setRawGeminiKey('');
     }
@@ -485,6 +512,9 @@ export default function App() {
 
         setMessages(prev => [...prev, assistantMsg]);
         addLog(`[AI RESP] Successfully generated output. Model: ${data.model} (Engine: ${config.activeEngine})`, 'success');
+        
+        // Log the actual text output to make it visible directly in the TUI logs
+        addLog(`\n--- ${config.activeEngine.toUpperCase()} RESP - ${data.model} ---\n${data.text}\n`, 'info');
 
         // Check if grounding was utilized
         if (data.searchUsed && data.grounding?.links?.length > 0) {
@@ -750,13 +780,13 @@ Generate a step-by-step description of what edits are required to achieve this g
                   <span className="text-emerald-400 font-semibold select-all">AES-GCM (256-bit)</span>
                 </div>
                 
-                {/* Save API Key details */}
-                <form onSubmit={handleSaveGeminiKey} className="space-y-2 pt-1 border-t border-neutral-850">
-                  <span className="text-[10px] text-neutral-400 font-bold block">BYOK: Personal Gemini API Key</span>
+                 {/* Save API Key details */}
+                <form onSubmit={handleSaveActiveKey} className="space-y-2 pt-1 border-t border-neutral-850">
+                  <span className="text-[10px] text-neutral-400 font-bold block">BYOK: Personal {config.activeEngine.toUpperCase()} {config.activeEngine === 'ollama' ? 'Host' : 'API Key'}</span>
                   <div className="relative">
                     <input
                       type={isKeyVisible ? 'text' : 'password'}
-                      placeholder="Paste your private API key..."
+                      placeholder={config.activeEngine === 'ollama' ? 'E.g., http://localhost:11434' : 'Paste private API key...'}
                       value={rawGeminiKey}
                       onChange={(e) => setRawGeminiKey(e.target.value)}
                       className="w-full bg-neutral-900 border border-neutral-800/80 focus:border-emerald-550 focus:outline-none text-xs px-3 py-1.5 rounded text-emerald-300 placeholder-neutral-650"
@@ -773,7 +803,7 @@ Generate a step-by-step description of what edits are required to achieve this g
                     type="submit"
                     className="w-full bg-neutral-900 hover:bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 py-1.5 rounded text-xs transition-colors font-sans select-none"
                   >
-                    Lock & Encrypt Credentials
+                    Lock & Encrypt Parameters
                   </button>
                 </form>
 
@@ -894,9 +924,9 @@ Generate a step-by-step description of what edits are required to achieve this g
                   }}
                   className="bg-neutral-900 border border-neutral-800 text-xs px-2.5 py-1 rounded text-emerald-400 focus:outline-none focus:border-emerald-500/50 font-mono font-bold cursor-pointer"
                 >
-                  <option value="gemini-3.5-flash">gemini-3.5-flash (Standard Quick)</option>
-                  <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview (Advanced Coding/Agent)</option>
-                  <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Ultra Fast)</option>
+                  {(ENGINE_MODELS[config.activeEngine] || ENGINE_MODELS.gemini).map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
                 </select>
               </div>
 

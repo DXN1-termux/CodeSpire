@@ -7,7 +7,7 @@ MADE WITH ❤️ BY DXN1
   <img src="https://img.shields.io/badge/Created_By-DXN1--termux-cyan?style=for-the-badge&logo=github&logoColor=white" alt="Author" />
   <img src="https://img.shields.io/badge/Platform-Termux_|_Linux_|_macOS_|_Windows-blueviolet?style=for-the-badge&logo=linux&logoColor=white" alt="Platform Support" />
   <img src="https://img.shields.io/badge/Secured_With-AES--GCM-brightgreen?style=for-the-badge&logo=snort&logoColor=white" alt="Security Vault" />
-  <img src="https://img.shields.io/badge/Engine-Gemini_3.5_Flash_|_Pro-deepskyblue?style=for-the-badge&logoColor=white" alt="AI Engine" />
+  <img src="https://img.shields.io/badge/Engine-Gemini_2.5_Flash_|_Pro_|_OpenAI_|_Claude-deepskyblue?style=for-the-badge&logoColor=white" alt="AI Engine" />
   <img src="https://img.shields.io/badge/Status-Stable-9cc728?style=for-the-badge" alt="Build Status" />
 </p>
 
@@ -134,6 +134,8 @@ Below is the dictionary of cryptographic command bindings supported inside the *
 | :--- | :--- | :--- |
 | `/help` | Launch CLI assistance directory. | Prints available CodeSpire commands, parameters, and aliases. |
 | `/sysinfo` | Query container system metrics. | Lists system memory loads, disk storage, thread uptime, and platforms. |
+| `/compile` | Run live TS compile & lint validation audit. | Runs an authentic `tsc --noEmit` and returns compiler and type checking logs. |
+| `/read <file_path>` | Print safe sandbox file content line-by-line. | Outputs exact file content prefixed with sequential line index indicators. |
 | `/setkey <api_key>` | Lock active engine credentials. | Encrypts key inside secure local dashboard (or sets Ollama Host URL). |
 | `/engine <provider>` | Switch active synthesis provider. | Instantly swaps between `gemini`, `openai`, `anthropic`, and local `ollama`. |
 | `/model <name>` | Swaps active reasoning brain model. | Targets specific LLM model ID based on the active engine. |

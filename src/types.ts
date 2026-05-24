@@ -2,6 +2,17 @@
  * CodeSpire Shared Type Definitions
  */
 
+export type EngineType = 'gemini' | 'openai' | 'anthropic' | 'ollama';
+export type ThemeType = 'cosmic' | 'matrix' | 'cyberpunk' | 'deepsea';
+
+export interface ModelDefinition {
+  id: string;
+  name: string;
+  description: string;
+  maxTokens: number;
+  tier: 'Fast' | 'High Reasoning' | 'Advanced' | 'offline';
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -24,7 +35,7 @@ export interface WorkspaceFile {
 }
 
 export interface CodeSpireConfig {
-  activeEngine: 'gemini' | 'openai' | 'anthropic' | 'ollama';
+  activeEngine: EngineType;
   activeModel: string;
   temperature: number;
   masterKey: string; // The user-defined decryption key
@@ -36,7 +47,7 @@ export interface CodeSpireConfig {
   encryptedGithubToken: string;
   useSearch: boolean;
   systemInstruction: string;
-  activeTheme?: 'cosmic' | 'matrix' | 'cyberpunk' | 'deepsea';
+  activeTheme?: ThemeType;
 }
 
 export interface Plugin {
