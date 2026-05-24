@@ -129,6 +129,91 @@ app.post('/api/workspace/write-file', (req, res) => {
   }
 });
 
+// 3b. API: AI-Driven Self-Mutation (Dynamic code-rewriting & self-evolution engine)
+app.post('/api/workspace/mutate-self', async (req, res) => {
+  try {
+    const { filePath, instruction, customApiKey, model = 'gemini-3.5-flash' } = req.body;
+    if (!filePath) {
+      return res.status(400).json({ status: 'error', message: 'No file path provided' });
+    }
+    if (!instruction) {
+      return res.status(400).json({ status: 'error', message: 'No rewrite instruction provided' });
+    }
+
+    // Resolve absolute path and protect boundaries
+    const safePath = path.resolve(process.cwd(), filePath);
+    if (!safePath.startsWith(process.cwd())) {
+      return res.status(403).json({ status: 'error', message: 'Access denied: Target path outside workspace.' });
+    }
+
+    if (!fs.existsSync(safePath)) {
+      return res.status(404).json({ status: 'error', message: `Target file not found for mutation: ${filePath}` });
+    }
+
+    const currentContent = fs.readFileSync(safePath, 'utf8');
+
+    // Retrieve API key
+    const apiKey = customApiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Master key/API key required for self-healing operations.' 
+      });
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey: apiKey,
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+    });
+
+    let targetModel = model;
+    if (model === 'gemini-flash') targetModel = 'gemini-flash-latest';
+    else if (model === 'gemini-pro') targetModel = 'gemini-3.1-pro-preview';
+
+    const systemPrompt = `You are the CodeSpire Autonomous Self-Mutation Core. 
+You are given the source code of a file and editing instructions.
+Your absolute only task is to rewrite the file completely to satisfy the instructions.
+You must output ONLY raw code matching the file extension. 
+CRITICAL: Do not include ANY introductory or concluding conversational prose. Do NOT warp the code in backticks like "\`\`\`typescript" or "\`\`\`. Start immediately with code.`;
+
+    const userPrompt = `### FILE PATH: ${filePath}\n\n### ORIGINAL FILE CONTENT:\n${currentContent}\n\n### MUTATION INSTRUCTIONS:\n${instruction}`;
+
+    const response = await ai.models.generateContent({
+      model: targetModel,
+      contents: userPrompt,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.2, // low temperature for precise code rewriting
+      }
+    });
+
+    let mutatedCode = response.text || '';
+    
+    // Safety scrub for markdown wrappers if the AI makes an exception
+    if (mutatedCode.startsWith('```')) {
+      const firstLineBreak = mutatedCode.indexOf('\n');
+      const lastTripleTick = mutatedCode.lastIndexOf('```');
+      if (firstLineBreak !== -1 && lastTripleTick > firstLineBreak) {
+        mutatedCode = mutatedCode.substring(firstLineBreak + 1, lastTripleTick).trim();
+      }
+    }
+
+    // Write mutated code straight back into the sandbox directory!
+    fs.writeFileSync(safePath, mutatedCode, 'utf8');
+
+    res.json({
+      status: 'success',
+      message: `File modified successfully via self-mutation loop.`,
+      path: filePath,
+      mutatedContentLength: mutatedCode.length,
+      sample: mutatedCode.substring(0, 300) + '...'
+    });
+  } catch (error: any) {
+    console.error('Self-mutation engine failure:', error);
+    res.status(500).json({ status: 'error', message: error?.message || 'Self-mutation failed.' });
+  }
+});
+
 // 4. API: AI Generation Chat with BYOK support and Grounding
 app.post('/api/ai/chat', async (req, res) => {
   try {

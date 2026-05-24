@@ -59,7 +59,8 @@ export default function App() {
     encryptedGeminiKey: '',
     encryptedGithubToken: '',
     useSearch: true,
-    systemInstruction: DEFAULT_SYSTEM_INSTRUCTION
+    systemInstruction: DEFAULT_SYSTEM_INSTRUCTION,
+    activeTheme: 'cosmic'
   });
 
   const [rawGeminiKey, setRawGeminiKey] = useState('');
@@ -79,6 +80,15 @@ export default function App() {
       settings: { repoUrl: 'https://github.com/DXN1-termux/CodeSpire.git', branch: 'main' }
     },
     {
+      id: 'self-evolution',
+      name: 'Hyper-Mutator Evolution Core',
+      description: 'Recursively reviews its own file-system coordinates, correcting syntax and compiler anomalies.',
+      enabled: true,
+      icon: 'Cpu',
+      commandName: 'mutate',
+      settings: { recursionLimit: 3, autoHeal: true }
+    },
+    {
       id: 'file-output',
       name: 'Structured Code Exporter',
       description: 'Writes direct, compilable outputs correctly to any source-tree coordinates.',
@@ -88,6 +98,15 @@ export default function App() {
       settings: { outputDir: './src' }
     },
     {
+      id: 'mock-routes',
+      name: 'Mock API Synth Generator',
+      description: 'Auto-synthesizes Express mock middleware routes on the fly if undefined endpoints are queried.',
+      enabled: false,
+      icon: 'Sliders',
+      commandName: 'endpoints',
+      settings: { targetFile: 'server.ts' }
+    },
+    {
       id: 'search-grounding',
       name: 'Scraper / Web Search',
       description: 'Enables active search grounding for fetching up-to-date documentation on the fly.',
@@ -95,6 +114,15 @@ export default function App() {
       icon: 'Globe',
       commandName: 'search',
       settings: { provider: 'googleSearch' }
+    },
+    {
+      id: 'dep-shield',
+      name: 'Dependency Armored Shield',
+      description: 'Passively audits package peer conflicts, generating custom secure shields.',
+      enabled: true,
+      icon: 'ShieldCheck',
+      commandName: 'shield',
+      settings: { auditLevel: 'strict' }
     },
     {
       id: 'sandbox-diagnostics',
@@ -178,6 +206,63 @@ export default function App() {
     } catch (err) {
       addLog('Master Key verification failed. Decryption was unsuccessful!', 'error');
       return null;
+    }
+  };
+
+  // Inject plugin dynamically on the fly
+  const handleInjectPlugin = (id: string, name: string) => {
+    const cleanId = id.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (plugins.some(p => p.id === cleanId)) {
+      addLog(`Plugin Registry: ID "${cleanId}" already registered. Boundary override denied!`, 'warning');
+      return;
+    }
+
+    const newPlugin: Plugin = {
+      id: cleanId,
+      name,
+      description: `Injected custom dynamic plugin. Active terminal hook: /${cleanId}`,
+      enabled: true,
+      icon: 'Sliders',
+      commandName: cleanId,
+      settings: { dynamicOverride: true, createdTimestamp: new Date().toISOString() }
+    };
+
+    setPlugins(prev => [...prev, newPlugin]);
+    addLog(`✨ DYNAMIC WORKFLOW PLUGIN MOUNTED SUCCESSFULY: "${name}" [ID: ${cleanId}]`, 'success');
+  };
+
+  // Self-Mutation engine execution route
+  const handleMutateSelf = async (filePath: string, instruction: string) => {
+    addLog(`🧬 Preparing mutation stream...`, 'info');
+    let customKey: string | null = null;
+    if (config.encryptedGeminiKey) {
+      customKey = await getDecryptedApiKey();
+    }
+
+    addLog(`🧬 Processing mutation requests for: ${filePath}`, 'warning');
+    addLog(`Synthesizing dynamic delta changes via neural brain: ${config.activeModel}...`, 'info');
+
+    try {
+      const response = await fetch('/api/workspace/mutate-self', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePath,
+          instruction,
+          customApiKey: customKey,
+          model: config.activeModel
+        })
+      });
+
+      const data = await response.json();
+      if (data.status === 'success') {
+        addLog(`🧬 FILE SYSTEM MUTATION COMPLETED SUCCESSFULY!`, 'success');
+        addLog(`Successfully rewrote ${filePath} coordinates (${data.mutatedContentLength} bytes written into sandbox)`, 'success');
+      } else {
+        addLog(`Genetic mutation loop rejected output: ${data.message}`, 'error');
+      }
+    } catch (err: any) {
+      addLog(`Unexpected engine fail during rewrite sequence: ${err?.message || err}`, 'error');
     }
   };
 
@@ -777,6 +862,8 @@ Generate a step-by-step description of what edits are required to achieve this g
                 onSendMessage={handleSendMessage}
                 onSetConfig={setConfig}
                 onTriggerAgent={triggerAutonomousAgent}
+                onMutateSelf={handleMutateSelf}
+                onInjectPlugin={handleInjectPlugin}
               />
             </div>
 

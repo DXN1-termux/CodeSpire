@@ -32,6 +32,7 @@ export interface CodeSpireConfig {
   encryptedGithubToken: string;
   useSearch: boolean;
   systemInstruction: string;
+  activeTheme?: 'cosmic' | 'matrix' | 'cyberpunk' | 'deepsea';
 }
 
 export interface Plugin {
