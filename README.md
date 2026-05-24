@@ -1,3 +1,5 @@
+MADE WITH ❤️ BY DXN1
+
 # CodeSpire (v1e-PRO) ⚙️ 🛰️
 
 <p align="center">
@@ -191,4 +193,4 @@ CodeSpire contains an interactive plugin suite allowing power users to configure
 4.  Commit with precise visual context: `git commit -m "feat: implement glow borders on terminal logs"`
 5.  Request review: Open a Pull Request targeting `/DXN1-termux/CodeSpire`
 
-*Designed and engineered in the sandbox container with complete local-device developer autonomy.*
+*Designed and engineered with complete local-device developer autonomy by DXN1.*
