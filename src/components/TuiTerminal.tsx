@@ -10,7 +10,8 @@ import {
   ShieldCheck,
   ChevronRight,
   Info,
-  Server
+  Server,
+  ExternalLink
 } from 'lucide-react';
 import { Message, TerminalLog, CodeSpireConfig } from '../types';
 
@@ -26,6 +27,8 @@ interface TuiTerminalProps {
   onTriggerAgent: (goal: string) => void;
   onMutateSelf: (filePath: string, instruction: string) => Promise<void>;
   onInjectPlugin: (id: string, name: string) => void;
+  hasServerKey: boolean;
+  onSaveRawApiKey: (key: string) => Promise<boolean>;
 }
 
 export default function TuiTerminal({
@@ -39,7 +42,9 @@ export default function TuiTerminal({
   onSetConfig,
   onTriggerAgent,
   onMutateSelf,
-  onInjectPlugin
+  onInjectPlugin,
+  hasServerKey,
+  onSaveRawApiKey
 }: TuiTerminalProps) {
   const [inputVal, setInputVal] = useState('');
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
@@ -179,13 +184,8 @@ export default function TuiTerminal({
           if (!args) {
             onAddLog(`Error: Please specify key content. Usage: /setkey <GEMINI_API_KEY>`, 'error');
           } else {
-            // Decrypt key with standard master key to secure passphrase if set, otherwise save directly in local storage encrypted
             onAddLog(`Encrypting and storing key in secure dashboard registry...`, 'info');
-            onSetConfig(prev => ({
-              ...prev,
-              encryptedGeminiKey: args, // App component handles real encryption mapping with Master Key
-            }));
-            onAddLog(`API Key updated successfully and local-stored with high-grade lock!`, 'success');
+            await onSaveRawApiKey(args);
           }
           break;
 
@@ -335,6 +335,72 @@ export default function TuiTerminal({
           <div>TYPE <span className="text-emerald-400 font-semibold cursor-pointer" onClick={() => executeCommand('/help')}>/help</span> TO LIST CRYPTOGRAPHIC ASSISTANT WORKFLOW TOOLS</div>
         </div>
 
+        {/* ONBOARDING KEY INTERCEPT OVERLAY */}
+        {(!config.encryptedGeminiKey && !hasServerKey) && (
+          <div className="p-4 bg-amber-500/5 border border-amber-500/15 rounded-md mb-4 select-none animate-pulse-subtle">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-amber-500/10 text-amber-400 rounded-md border border-amber-500/20 shrink-0">
+                <Info size={16} className="animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest font-sans">
+                  ⚠️ ONBOARDING ACTION REQUIRED: GEMINI API KEY UNCONFIGURED
+                </h4>
+                <p className="text-[11px] text-neutral-400 mt-1.5 leading-relaxed">
+                  Welcome to CodeSpire CLI. To unlock autonomous developers commands and generative synthesis routines, paste your Gemini API key below to encrypt and lock it into your local session.
+                </p>
+                
+                {/* Micro Input Setup Form */}
+                <div className="mt-3 flex gap-2 max-w-lg items-center">
+                  <input
+                    type="password"
+                    placeholder="Pasted GEMINI_API_KEY..."
+                    id="onboarding-key-input"
+                    className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-xs text-amber-300 focus:outline-none focus:border-amber-500 placeholder:text-neutral-600 font-mono"
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter') {
+                        const val = e.currentTarget.value;
+                        if (val) {
+                          await onSaveRawApiKey(val);
+                          e.currentTarget.value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={async () => {
+                      const input = document.getElementById('onboarding-key-input') as HTMLInputElement | null;
+                      if (input && input.value) {
+                        await onSaveRawApiKey(input.value);
+                        input.value = '';
+                      }
+                    }}
+                    className="px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-bold uppercase rounded border border-amber-500/30 cursor-pointer transition-colors shrink-0 font-sans"
+                  >
+                    DEPLOY KEY
+                  </button>
+                </div>
+                
+                <div className="flex items-center gap-2 mt-2.5 text-[10px] text-neutral-500 font-mono">
+                  <span>OR run command:</span>
+                  <code className="bg-neutral-900 px-1 py-0.5 border border-neutral-800 rounded text-neutral-300 select-all font-semibold">
+                    /setkey YOUR_GEMINI_API_KEY
+                  </code>
+                  <span>•</span>
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-amber-500/80 hover:text-amber-400 underline transition-colors flex items-center gap-0.5"
+                  >
+                    GET FREE KEY <ExternalLink size={10} />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {logs.map((log) => (
           <div key={log.id} className="text-xs leading-relaxed break-all font-mono transition-all duration-150">
             <span className="text-[10px] text-neutral-600 mr-2 shrink-0 select-none">[{log.timestamp}]</span>
@@ -354,7 +420,13 @@ export default function TuiTerminal({
         </div>
         <div className="flex items-center gap-2">
           <span className="text-amber-500">BYOK:</span>
-          <span>{config.encryptedGeminiKey ? '🔒 LOCKED / STICKY' : '🔓 EMPTY (USES SYSTEM KEY)'}</span>
+          <span>
+            {config.encryptedGeminiKey 
+              ? '🔒 LOCKED / STICKY' 
+              : hasServerKey 
+                ? '🟢 ACTIVE (HOST SYSTEM KEY)' 
+                : '🔓 UNCONFIGURED (SUSPENDED)'}
+          </span>
         </div>
       </div>
 
@@ -369,7 +441,11 @@ export default function TuiTerminal({
           onChange={(e) => setInputVal(e.target.value)}
           onKeyDown={handleKeyDown}
           className="flex-1 bg-transparent text-emerald-400 font-mono text-xs focus:outline-none selection:bg-emerald-500/30 selection:text-white"
-          placeholder="Type workflow commands or query Gemini... (try: /help or /sysinfo)"
+          placeholder={
+            (!config.encryptedGeminiKey && !hasServerKey)
+              ? "Key required! Paste it inside standard setup above or run: /setkey YOUR_KEY"
+              : "Type workflow commands or query Gemini... (try: /help or /sysinfo)"
+          }
           spellCheck={false}
           autoFocus
         />

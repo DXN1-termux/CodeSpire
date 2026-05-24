@@ -138,6 +138,7 @@ export default function App() {
   // AI Chat history
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
+  const [hasServerKey, setHasServerKey] = useState<boolean>(false);
 
   // Autonomous Agent controller state
   const [agentGoal, setAgentGoal] = useState('');
@@ -150,24 +151,47 @@ export default function App() {
     currentStepIndex: 0
   });
 
-  // Load sticky configuration from local storage on mount
+  // Load sticky configuration and run telemetry key scan on mount
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('codespire_client_config');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.encryptedGeminiKey) {
-          addLog('Found saved encrypted API Key in localStorage. Enter Master Password to unlock.', 'warning');
+    const initConfig = async () => {
+      let isLocalKeyFound = false;
+      try {
+        const stored = localStorage.getItem('codespire_client_config');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.encryptedGeminiKey) {
+            isLocalKeyFound = true;
+            addLog('Found saved encrypted API Key in localStorage. Enter Master Password to unlock.', 'warning');
+          }
+          setConfig(prev => ({
+            ...prev,
+            ...parsed,
+            isMasterKeyConfigured: false // Wait for master password confirmation
+          }));
         }
-        setConfig(prev => ({
-          ...prev,
-          ...parsed,
-          isMasterKeyConfigured: false // Wait for master password confirmation
-        }));
+      } catch (err) {
+        addLog('Failed to recover stored system parameters.', 'error');
       }
-    } catch (err) {
-      addLog('Failed to recover stored system parameters.', 'error');
-    }
+
+      // Check server system key telemetry configurations
+      try {
+        const res = await fetch('/api/workspace/key-check');
+        const data = await res.json();
+        if (data.status === 'success') {
+          const sysActive = !!data.hasSystemKey;
+          setHasServerKey(sysActive);
+          if (!sysActive && !isLocalKeyFound) {
+            addLog('⚠️ ONBOARDING ADVISORY: No active Gemini API key is configured. Synthesis chat commands are suspended until a key is linked.', 'warning');
+          } else if (sysActive) {
+            addLog('📡 Host system API key verified! Development shell layers initialized.', 'success');
+          }
+        }
+      } catch (err) {
+        console.error('Host environment telemetry run error:', err);
+      }
+    };
+
+    initConfig();
   }, []);
 
   // Sync to local storage when parameters change
@@ -266,6 +290,28 @@ export default function App() {
     }
   };
 
+  // Helper to encrypt and save any raw Gemini Key values directly
+  const saveRawApiKey = async (key: string): Promise<boolean> => {
+    if (!key.trim()) {
+      addLog('Gemini API Key cannot be blank.', 'warning');
+      return false;
+    }
+    try {
+      const encrypted = await encryptData(key.trim(), config.masterKey);
+      const updatedConfig = {
+        ...config,
+        encryptedGeminiKey: encrypted
+      };
+      setConfig(updatedConfig);
+      saveConfigToStorage(updatedConfig);
+      addLog('Gemini API key encrypted and saved locally with Master Key protection!', 'success');
+      return true;
+    } catch (err: any) {
+      addLog(`Cryptographic initialization failure: ${err?.message || err}`, 'error');
+      return false;
+    }
+  };
+
   // Secure & encrypt Gemini Key
   const handleSaveGeminiKey = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,18 +319,9 @@ export default function App() {
       addLog('Please enter a valid Gemini API key.', 'warning');
       return;
     }
-    try {
-      const encrypted = await encryptData(rawGeminiKey.trim(), config.masterKey);
-      const updatedConfig = {
-        ...config,
-        encryptedGeminiKey: encrypted
-      };
-      setConfig(updatedConfig);
-      saveConfigToStorage(updatedConfig);
+    const success = await saveRawApiKey(rawGeminiKey.trim());
+    if (success) {
       setRawGeminiKey('');
-      addLog('Gemini API key encrypted and saved locally with Master Key protection!', 'success');
-    } catch (err: any) {
-      addLog(`Cryptographic initialization failure: ${err?.message || err}`, 'error');
     }
   };
 
@@ -334,7 +371,15 @@ export default function App() {
 
   // AI Prompt Send Pipeline
   const handleSendMessage = async (text: string) => {
-    // 1. Check if we have an explicit custom client-side key
+    // 1. Guard against unconfigured API keys (onboarding check)
+    // Avoid blocking standard commands if passed through here incorrectly (just a safety precaution)
+    if (!config.encryptedGeminiKey && !hasServerKey) {
+      addLog(`❌ AI Core Synthesis Gated: No operational API key detected in sandbox session.`, 'error');
+      addLog(`👉 Action required: Type "/setkey YOUR_GEMINI_API_KEY" in the console or paste your key into the onboarding form.`, 'warning');
+      return;
+    }
+
+    // 2. Check if we have an explicit custom client-side key
     let customKey: string | null = null;
     if (config.encryptedGeminiKey) {
       customKey = await getDecryptedApiKey();
@@ -864,6 +909,8 @@ Generate a step-by-step description of what edits are required to achieve this g
                 onTriggerAgent={triggerAutonomousAgent}
                 onMutateSelf={handleMutateSelf}
                 onInjectPlugin={handleInjectPlugin}
+                hasServerKey={hasServerKey}
+                onSaveRawApiKey={saveRawApiKey}
               />
             </div>
 

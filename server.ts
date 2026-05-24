@@ -73,6 +73,14 @@ app.get('/api/workspace/files', (req, res) => {
   }
 });
 
+// 1b. API: Check if server has system API key configured
+app.get('/api/workspace/key-check', (req, res) => {
+  res.json({
+    status: 'success',
+    hasSystemKey: !!process.env.GEMINI_API_KEY
+  });
+});
+
 // 2. API: Read specific workspace file
 app.post('/api/workspace/read-file', (req, res) => {
   try {
