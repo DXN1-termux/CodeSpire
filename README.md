@@ -7,7 +7,7 @@ MADE WITH ❤️ BY DXN1
   <img src="https://img.shields.io/badge/Created_By-DXN1--termux-cyan?style=for-the-badge&logo=github&logoColor=white" alt="Author" />
   <img src="https://img.shields.io/badge/Platform-Termux_|_Linux_|_macOS_|_Windows-blueviolet?style=for-the-badge&logo=linux&logoColor=white" alt="Platform Support" />
   <img src="https://img.shields.io/badge/Secured_With-AES--GCM-brightgreen?style=for-the-badge&logo=snort&logoColor=white" alt="Security Vault" />
-  <img src="https://img.shields.io/badge/Engine DXN1|_Pro-deepskyblue?style=for-the-badge&logoColor=white" alt="AI Engine" />
+  <img src="https://img.shields.io/badge/Engine-Gemini_3.5_Flash_|_Pro-deepskyblue?style=for-the-badge&logoColor=white" alt="AI Engine" />
   <img src="https://img.shields.io/badge/Status-Stable-9cc728?style=for-the-badge" alt="Build Status" />
 </p>
 
@@ -26,9 +26,10 @@ CodeSpire enables a complete BYOK (Bring Your Own Key) workflow, where your keys
 ## 🛠️ Key Architectural Highlights
 
 *   **Multi-Platform Autonomy**: Developed to run with identical layout efficiency and responsiveness across Termux (Android), macOS, Linux core architectures, and Windows terminal simulators.
-*   **Encrypted Credential Safe**: Integrates high-grade Web Cryptography API algorithms (AES-GCM 256-bit keys with secure salt vectors) and native XOR cascading fallback streams for non-secure contexts. Your API keys never leave your workspace.
+*   **Encrypted Credential Safe**: Integrates high-grade Web Cryptography API algorithms (AES-GCM 256-bit keys with secure salt vectors) and native XOR cascading fallback streams for non-secure contexts. Your API keys (Gemini, OpenAI, and Anthropic) never leave your workspace.
+*   **Unified Multi-Engine Core**: Orchestrate your automated flows across **Gemini**, **OpenAI**, **Anthropic**, and **Ollama (local)** from a single visual dashboard, with automated fallback states.
 *   **Live Sandbox Write-Backs**: Direct read/write bindings allowing the client and background agents to programmatically fetch structure files, write templates, create components, or execute commands straight to files.
-*   **Flexible Model Registry**: Instantly cycle between premium generative intelligence engines (e.g., `gemini-3.5-flash`, `gemini-3.1-pro-preview`, and `gemini-3.1-flash-lite`) based on your specific developer parameters.
+*   **Flexible Model Registry**: Instantly cycle between premium generative intelligence engines (e.g., `gemini-3.5-flash`, `gpt-4o`, `claude-3-5-sonnet-20241022`, and local `llama 3`) based on your specific developer parameters.
 *   **Web Grounding & Dynamic Search**: Infused with live Google Search retrieval tools, enabling AI agents to scan the internet, query live packages, and fetch official updated documentation on the fly to resolve dependency crashes.
 *   **Agent TUI & Visual Monitoring**: Watch active loop execution step-by-step through a state-driven planning dashboard featuring real-time process indicators, stage logs, progress tickers, and environment parameters.
 
@@ -43,17 +44,17 @@ CodeSpire uses a lightweight, highly compatible structure:
 ├── index.html                # High-fidelity single-view base template index
 ├── metadata.json             # Applet descriptor (CodeSpire permissions)
 ├── package.json              # System package manifest configuring server environments
-├── server.ts                 # Express full-stack middleware handling files, grounding chat, & simulation logs
+├── server.ts                 # Express full-stack middleware handling files, multi-engine grounding chat, & simulation logs
 ├── tsconfig.json             # TypeScript static typing compiler policies
 ├── vite.config.ts            # High-speed static bundle layout policies
 ├── src/
-│   ├── App.tsx               # Master App HUD. Coordinates ciphers, agent state, and layout
+│   ├── App.tsx               # Master App HUD. Coordinates ciphers, multi-engine routing, and layout
 │   ├── main.tsx              # React mounting root
 │   ├── index.css             # Tailwind style sheets config
 │   ├── types.ts              # System types (Message, WorkspaceFile, Config, Plugins, Logs)
 │   ├── components/
 │   │   ├── WorkspacePane.tsx # Tree structure explorer, directory reader, & code-saving engine
-│   │   └── TuiTerminal.tsx   # Command parser, prompt routing CLI interface, and TUI logs screen
+│   │   └── TuiTerminal.tsx   # Command parser, multi-engine prompt routing, and TUI logs screen
 │   └── utils/
 │       └── crypto.ts         # Encrypted AES-GCM and fallback XOR memory storage ciphers
 ```
@@ -133,8 +134,9 @@ Below is the dictionary of cryptographic command bindings supported inside the *
 | :--- | :--- | :--- |
 | `/help` | Launch CLI assistance directory. | Prints available CodeSpire commands, parameters, and aliases. |
 | `/sysinfo` | Query container system metrics. | Lists system memory loads, disk storage, thread uptime, and platforms. |
-| `/setkey <api_key>` | Lock a private API key into client state. | Encrypts key inside your secure local dashboard via Master Password. |
-| `/model <pro\|lite\|flash>` | Swaps active neural engine. | Diverts reasoning queries dynamically between Gemini 3.5, Lite, and Pro. |
+| `/setkey <api_key>` | Lock active engine credentials. | Encrypts key inside secure local dashboard (or sets Ollama Host URL). |
+| `/engine <provider>` | Switch active synthesis provider. | Instantly swaps between `gemini`, `openai`, `anthropic`, and local `ollama`. |
+| `/model <name>` | Swaps active reasoning brain model. | Targets specific LLM model ID based on the active engine. |
 | `/search <query>` | Trigger Google web search grounding. | Scrapes modern live resources to return grounded developer facts. |
 | `/agent <goal_description>` | Initiate autonomous workflow agent. | Sequentially designs, reviews, writes, and tests files for a requested goal. |
 | `/write <path> <text>` | Directly create or overwrite a sandbox file. | Injects content immediately into the specified directory coordinates. |

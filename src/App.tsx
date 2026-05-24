@@ -52,11 +52,15 @@ export default function App() {
 
   // Master Configuration
   const [config, setConfig] = useState<CodeSpireConfig>({
+    activeEngine: 'gemini',
     activeModel: 'gemini-3.5-flash',
     temperature: 0.7,
     masterKey: 'spire-secure-pass',
     isMasterKeyConfigured: false,
     encryptedGeminiKey: '',
+    encryptedOpenAiKey: '',
+    encryptedAnthropicKey: '',
+    ollamaHost: 'http://localhost:11434',
     encryptedGithubToken: '',
     useSearch: true,
     systemInstruction: DEFAULT_SYSTEM_INSTRUCTION,
@@ -139,6 +143,12 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [hasServerKey, setHasServerKey] = useState<boolean>(false);
+  const [serverKeys, setServerKeys] = useState({
+    gemini: false,
+    openai: false,
+    anthropic: false,
+    ollama: false
+  });
 
   // Autonomous Agent controller state
   const [agentGoal, setAgentGoal] = useState('');
@@ -159,9 +169,9 @@ export default function App() {
         const stored = localStorage.getItem('codespire_client_config');
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (parsed.encryptedGeminiKey) {
+          if (parsed.encryptedGeminiKey || parsed.encryptedOpenAiKey || parsed.encryptedAnthropicKey) {
             isLocalKeyFound = true;
-            addLog('Found saved encrypted API Key in localStorage. Enter Master Password to unlock.', 'warning');
+            addLog('Found saved encrypted API key(s) in localStorage. Enter Master Password to unlock.', 'warning');
           }
           setConfig(prev => ({
             ...prev,
@@ -180,8 +190,14 @@ export default function App() {
         if (data.status === 'success') {
           const sysActive = !!data.hasSystemKey;
           setHasServerKey(sysActive);
+          setServerKeys({
+            gemini: !!data.hasGeminiKey,
+            openai: !!data.hasOpenAiKey,
+            anthropic: !!data.hasAnthropicKey,
+            ollama: !!data.hasOllamaHost
+          });
           if (!sysActive && !isLocalKeyFound) {
-            addLog('⚠️ ONBOARDING ADVISORY: No active Gemini API key is configured. Synthesis chat commands are suspended until a key is linked.', 'warning');
+            addLog('⚠️ ONBOARDING ADVISORY: CodeSpire keys are unconfigured. Chat synthesis commands are limited until provider parameters are defined.', 'warning');
           } else if (sysActive) {
             addLog('📡 Host system API key verified! Development shell layers initialized.', 'success');
           }
@@ -259,12 +275,23 @@ export default function App() {
   const handleMutateSelf = async (filePath: string, instruction: string) => {
     addLog(`🧬 Preparing mutation stream...`, 'info');
     let customKey: string | null = null;
-    if (config.encryptedGeminiKey) {
-      customKey = await getDecryptedApiKey();
+    let targetEncryptedKey = '';
+    
+    if (config.activeEngine === 'gemini') targetEncryptedKey = config.encryptedGeminiKey;
+    else if (config.activeEngine === 'openai') targetEncryptedKey = config.encryptedOpenAiKey;
+    else if (config.activeEngine === 'anthropic') targetEncryptedKey = config.encryptedAnthropicKey;
+
+    if (targetEncryptedKey) {
+      try {
+        customKey = await decryptData(targetEncryptedKey, config.masterKey);
+      } catch (e) {
+        addLog('Could not decrypt secure client key. Please confirm your Master Password.', 'warning');
+        return;
+      }
     }
 
     addLog(`🧬 Processing mutation requests for: ${filePath}`, 'warning');
-    addLog(`Synthesizing dynamic delta changes via neural brain: ${config.activeModel}...`, 'info');
+    addLog(`Synthesizing dynamic delta changes via neural brain: ${config.activeModel} (Engine: ${config.activeEngine})...`, 'info');
 
     try {
       const response = await fetch('/api/workspace/mutate-self', {
@@ -274,7 +301,9 @@ export default function App() {
           filePath,
           instruction,
           customApiKey: customKey,
-          model: config.activeModel
+          model: config.activeModel,
+          engine: config.activeEngine,
+          ollamaHost: config.ollamaHost
         })
       });
 
@@ -290,21 +319,26 @@ export default function App() {
     }
   };
 
-  // Helper to encrypt and save any raw Gemini Key values directly
-  const saveRawApiKey = async (key: string): Promise<boolean> => {
+  // Helper to encrypt and save any raw API Key values directly
+  const saveRawApiKey = async (key: string, engine: 'gemini' | 'openai' | 'anthropic' | 'ollama' = 'gemini'): Promise<boolean> => {
     if (!key.trim()) {
-      addLog('Gemini API Key cannot be blank.', 'warning');
+      addLog('Credentials or parameters cannot be blank.', 'warning');
       return false;
     }
     try {
-      const encrypted = await encryptData(key.trim(), config.masterKey);
-      const updatedConfig = {
-        ...config,
-        encryptedGeminiKey: encrypted
-      };
+      let updatedConfig = { ...config };
+      if (engine === 'gemini' || engine === 'openai' || engine === 'anthropic') {
+        const encrypted = await encryptData(key.trim(), config.masterKey);
+        if (engine === 'gemini') updatedConfig.encryptedGeminiKey = encrypted;
+        else if (engine === 'openai') updatedConfig.encryptedOpenAiKey = encrypted;
+        else if (engine === 'anthropic') updatedConfig.encryptedAnthropicKey = encrypted;
+      } else if (engine === 'ollama') {
+        updatedConfig.ollamaHost = key.trim();
+      }
+      
       setConfig(updatedConfig);
       saveConfigToStorage(updatedConfig);
-      addLog('Gemini API key encrypted and saved locally with Master Key protection!', 'success');
+      addLog(`${engine.toUpperCase()} parameters stored and locked within local session.`, 'success');
       return true;
     } catch (err: any) {
       addLog(`Cryptographic initialization failure: ${err?.message || err}`, 'error');
@@ -319,7 +353,7 @@ export default function App() {
       addLog('Please enter a valid Gemini API key.', 'warning');
       return;
     }
-    const success = await saveRawApiKey(rawGeminiKey.trim());
+    const success = await saveRawApiKey(rawGeminiKey.trim(), 'gemini');
     if (success) {
       setRawGeminiKey('');
     }
@@ -371,19 +405,35 @@ export default function App() {
 
   // AI Prompt Send Pipeline
   const handleSendMessage = async (text: string) => {
-    // 1. Guard against unconfigured API keys (onboarding check)
-    // Avoid blocking standard commands if passed through here incorrectly (just a safety precaution)
-    if (!config.encryptedGeminiKey && !hasServerKey) {
-      addLog(`❌ AI Core Synthesis Gated: No operational API key detected in sandbox session.`, 'error');
-      addLog(`👉 Action required: Type "/setkey YOUR_GEMINI_API_KEY" in the console or paste your key into the onboarding form.`, 'warning');
+    // 1. Guard against unconfigured API keys
+    let hasKey = false;
+    if (config.activeEngine === 'gemini') {
+      hasKey = !!config.encryptedGeminiKey || hasServerKey;
+    } else if (config.activeEngine === 'openai') {
+      hasKey = !!config.encryptedOpenAiKey || serverKeys.openai;
+    } else if (config.activeEngine === 'anthropic') {
+      hasKey = !!config.encryptedAnthropicKey || serverKeys.anthropic;
+    } else if (config.activeEngine === 'ollama') {
+      hasKey = true; // Local server defaults
+    }
+
+    if (!hasKey) {
+      addLog(`❌ AI Core Synthesis Gated: No operational credentials detected for ${config.activeEngine.toUpperCase()} sandbox session.`, 'error');
+      addLog(`👉 Action required: Type "/setkey YOUR_KEY" in the console or paste your key inside the onboarding setup wizard panel.`, 'warning');
       return;
     }
 
-    // 2. Check if we have an explicit custom client-side key
+    // 2. Check if we have an explicit custom client-side key to decrypt
     let customKey: string | null = null;
-    if (config.encryptedGeminiKey) {
-      customKey = await getDecryptedApiKey();
-      if (!customKey) {
+    let targetEncryptedKey = '';
+    if (config.activeEngine === 'gemini') targetEncryptedKey = config.encryptedGeminiKey;
+    else if (config.activeEngine === 'openai') targetEncryptedKey = config.encryptedOpenAiKey;
+    else if (config.activeEngine === 'anthropic') targetEncryptedKey = config.encryptedAnthropicKey;
+
+    if (targetEncryptedKey) {
+      try {
+        customKey = await decryptData(targetEncryptedKey, config.masterKey);
+      } catch (err) {
         addLog('Could not decrypt secure client key. Please confirm your Master Password.', 'warning');
         return;
       }
@@ -401,7 +451,7 @@ export default function App() {
     };
     setMessages(prev => [...prev, userMsg]);
 
-    addLog(`Translating prompt context to target model: ${config.activeModel}...`, 'info');
+    addLog(`Translating prompt context to target model: ${config.activeModel} (Engine: ${config.activeEngine})...`, 'info');
 
     try {
       const response = await fetch('/api/ai/chat', {
@@ -416,7 +466,9 @@ export default function App() {
           model: config.activeModel,
           temperature: config.temperature,
           customApiKey: customKey,
-          useSearch
+          useSearch,
+          engine: config.activeEngine,
+          ollamaHost: config.ollamaHost
         })
       });
 
@@ -432,7 +484,7 @@ export default function App() {
         };
 
         setMessages(prev => [...prev, assistantMsg]);
-        addLog(`[AI RESP] Successfully generated output. Model: ${data.model}`, 'success');
+        addLog(`[AI RESP] Successfully generated output. Model: ${data.model} (Engine: ${config.activeEngine})`, 'success');
 
         // Check if grounding was utilized
         if (data.searchUsed && data.grounding?.links?.length > 0) {

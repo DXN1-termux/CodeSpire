@@ -24,11 +24,15 @@ export interface WorkspaceFile {
 }
 
 export interface CodeSpireConfig {
+  activeEngine: 'gemini' | 'openai' | 'anthropic' | 'ollama';
   activeModel: string;
   temperature: number;
   masterKey: string; // The user-defined decryption key
   isMasterKeyConfigured: boolean;
   encryptedGeminiKey: string;
+  encryptedOpenAiKey: string;
+  encryptedAnthropicKey: string;
+  ollamaHost: string;
   encryptedGithubToken: string;
   useSearch: boolean;
   systemInstruction: string;

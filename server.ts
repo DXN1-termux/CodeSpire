@@ -10,6 +10,241 @@ const PORT = 3000;
 
 app.use(express.json({ limit: '50mb' }));
 
+interface AICompletionParams {
+  engine?: 'gemini' | 'openai' | 'anthropic' | 'ollama';
+  model: string;
+  prompt?: string;
+  messages?: any[];
+  systemInstruction?: string;
+  temperature?: number;
+  apiKey?: string;
+  ollamaHost?: string;
+  useSearch?: boolean;
+}
+
+interface AICompletionResponse {
+  text: string;
+  model: string;
+  searchUsed?: boolean;
+  grounding?: {
+    queries?: string[];
+    links?: { title: string; uri: string }[];
+  };
+}
+
+// Unified multi-engine content synthesizer
+async function generateAICompletion(params: AICompletionParams): Promise<AICompletionResponse> {
+  const {
+    engine = 'gemini',
+    model,
+    prompt,
+    messages = [],
+    systemInstruction = '',
+    temperature = 0.7,
+    apiKey,
+    ollamaHost = 'http://localhost:11434',
+    useSearch = false
+  } = params;
+
+  // Standardize messages to { role: 'user' | 'assistant', content: string }
+  const standardMessages = messages.map((m: any) => ({
+    role: m.role === 'model' || m.role === 'assistant' ? 'assistant' : 'user',
+    content: m.content
+  }));
+
+  // Append raw contextual prompt if provided
+  if (prompt) {
+    standardMessages.push({ role: 'user', content: prompt });
+  }
+
+  // GEMINI ENGINE COMPILATION
+  if (engine === 'gemini') {
+    const key = apiKey || process.env.GEMINI_API_KEY;
+    if (!key) throw new Error('AI Engine configuration fault: Gemini API Key is unconfigured.');
+
+    const ai = new GoogleGenAI({
+      apiKey: key,
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+    });
+
+    let targetModel = model;
+    if (model.includes('flash-lite')) targetModel = 'gemini-3.1-flash-lite';
+    else if (model.includes('pro')) targetModel = 'gemini-3.1-pro-preview';
+    else if (model.includes('flash') || !targetModel) targetModel = 'gemini-3.5-flash';
+
+    const config: any = {
+      temperature: Number(temperature),
+    };
+    if (systemInstruction) {
+      config.systemInstruction = systemInstruction;
+    }
+    if (useSearch) {
+      config.tools = [{ googleSearch: {} }];
+    }
+
+    const contents = standardMessages.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : m.role,
+      parts: [{ text: m.content }]
+    }));
+
+    const response = await ai.models.generateContent({
+      model: targetModel,
+      contents: contents,
+      config: config
+    });
+
+    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+    const searchQueries = groundingMetadata?.webSearchQueries || [];
+    const groundingChunks = groundingMetadata?.groundingChunks || [];
+
+    return {
+      text: response.text || '',
+      model: targetModel,
+      searchUsed: useSearch,
+      grounding: {
+        queries: searchQueries,
+        links: groundingChunks.map((chunk: any) => ({
+          title: chunk.web?.title || 'Web Search Link',
+          uri: chunk.web?.uri || ''
+        })).filter((item: any) => item.uri)
+      }
+    };
+  }
+
+  // OPENAI ENGINE COMPILATION
+  if (engine === 'openai') {
+    const key = apiKey || process.env.OPENAI_API_KEY;
+    if (!key) throw new Error('AI Engine configuration fault: OpenAI API Key is unconfigured.');
+
+    let targetModel = model;
+    if (targetModel.startsWith('gemini')) {
+      targetModel = 'gpt-4o'; // Auto transition standard
+    }
+
+    const payloadMessages: any[] = [];
+    if (systemInstruction) {
+      payloadMessages.push({ role: 'system', content: systemInstruction });
+    }
+    payloadMessages.push(...standardMessages);
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: targetModel,
+        messages: payloadMessages,
+        temperature: Number(temperature)
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`OpenAI Gateway error (${res.status}): ${errText}`);
+    }
+
+    const json = await res.json() as any;
+    const text = json.choices?.[0]?.message?.content || '';
+    return {
+      text,
+      model: targetModel
+    };
+  }
+
+  // ANTHROPIC ENGINE COMPILATION
+  if (engine === 'anthropic') {
+    const key = apiKey || process.env.ANTHROPIC_API_KEY;
+    if (!key) throw new Error('AI Engine configuration fault: Anthropic API Key is unconfigured.');
+
+    let targetModel = model;
+    if (targetModel.startsWith('gemini')) {
+      targetModel = 'claude-3-5-sonnet-20241022'; // Auto transition standard
+    }
+
+    const payloadMessages = standardMessages.map(m => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.content
+    }));
+
+    const body: any = {
+      model: targetModel,
+      messages: payloadMessages,
+      temperature: Number(temperature),
+      max_tokens: 4096
+    };
+    if (systemInstruction) {
+      body.system = systemInstruction;
+    }
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Anthropic Gateway error (${res.status}): ${errText}`);
+    }
+
+    const json = await res.json() as any;
+    const text = json.content?.[0]?.text || '';
+    return {
+      text,
+      model: targetModel
+    };
+  }
+
+  // OLLAMA ENGINE COMPILATION
+  if (engine === 'ollama') {
+    let targetModel = model;
+    if (targetModel.startsWith('gemini')) {
+      targetModel = 'llama3'; // Default container fallback
+    }
+
+    const payloadMessages: any[] = [];
+    if (systemInstruction) {
+      payloadMessages.push({ role: 'system', content: systemInstruction });
+    }
+    payloadMessages.push(...standardMessages);
+
+    const host = ollamaHost || process.env.OLLAMA_HOST || 'http://localhost:11434';
+    const cleanedHost = host.endsWith('/') ? host.slice(0, -1) : host;
+
+    const res = await fetch(`${cleanedHost}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: targetModel,
+        messages: payloadMessages,
+        temperature: Number(temperature)
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Ollama Local server error (${res.status}): ${errText}`);
+    }
+
+    const json = await res.json() as any;
+    const text = json.choices?.[0]?.message?.content || '';
+    return {
+      text,
+      model: targetModel
+    };
+  }
+
+  throw new Error(`Unsupported synthesis engine provider requested: "${engine}"`);
+}
+
 // Helper to recursively get files excluding node_modules/dist/.git
 function getFilesRecursively(dir: string, baseDir: string = dir): any[] {
   let results: any[] = [];
@@ -73,10 +308,14 @@ app.get('/api/workspace/files', (req, res) => {
   }
 });
 
-// 1b. API: Check if server has system API key configured
+// 1b. API: Check if server has system API key configured across providers
 app.get('/api/workspace/key-check', (req, res) => {
   res.json({
     status: 'success',
+    hasGeminiKey: !!process.env.GEMINI_API_KEY,
+    hasOpenAiKey: !!process.env.OPENAI_API_KEY,
+    hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
+    hasOllamaHost: !!process.env.OLLAMA_HOST,
     hasSystemKey: !!process.env.GEMINI_API_KEY
   });
 });
@@ -140,7 +379,7 @@ app.post('/api/workspace/write-file', (req, res) => {
 // 3b. API: AI-Driven Self-Mutation (Dynamic code-rewriting & self-evolution engine)
 app.post('/api/workspace/mutate-self', async (req, res) => {
   try {
-    const { filePath, instruction, customApiKey, model = 'gemini-3.5-flash' } = req.body;
+    const { filePath, instruction, customApiKey, model = 'gemini-3.5-flash', engine = 'gemini', ollamaHost } = req.body;
     if (!filePath) {
       return res.status(400).json({ status: 'error', message: 'No file path provided' });
     }
@@ -160,42 +399,25 @@ app.post('/api/workspace/mutate-self', async (req, res) => {
 
     const currentContent = fs.readFileSync(safePath, 'utf8');
 
-    // Retrieve API key
-    const apiKey = customApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'Master key/API key required for self-healing operations.' 
-      });
-    }
-
-    const ai = new GoogleGenAI({
-      apiKey: apiKey,
-      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-    });
-
-    let targetModel = model;
-    if (model === 'gemini-flash') targetModel = 'gemini-flash-latest';
-    else if (model === 'gemini-pro') targetModel = 'gemini-3.1-pro-preview';
-
     const systemPrompt = `You are the CodeSpire Autonomous Self-Mutation Core. 
 You are given the source code of a file and editing instructions.
 Your absolute only task is to rewrite the file completely to satisfy the instructions.
-You must output ONLY raw code matching the file extension. 
+Your output must be strictly valid raw code matching the file type or extension of ${filePath}. 
 CRITICAL: Do not include ANY introductory or concluding conversational prose. Do NOT warp the code in backticks like "\`\`\`typescript" or "\`\`\`. Start immediately with code.`;
 
     const userPrompt = `### FILE PATH: ${filePath}\n\n### ORIGINAL FILE CONTENT:\n${currentContent}\n\n### MUTATION INSTRUCTIONS:\n${instruction}`;
 
-    const response = await ai.models.generateContent({
-      model: targetModel,
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: 0.2, // low temperature for precise code rewriting
-      }
+    const completion = await generateAICompletion({
+      engine,
+      model,
+      prompt: userPrompt,
+      systemInstruction: systemPrompt,
+      temperature: 0.1, // very low temperature for precise code rewriting
+      apiKey: customApiKey,
+      ollamaHost
     });
 
-    let mutatedCode = response.text || '';
+    let mutatedCode = completion.text || '';
     
     // Safety scrub for markdown wrappers if the AI makes an exception
     if (mutatedCode.startsWith('```')) {
@@ -232,98 +454,33 @@ app.post('/api/ai/chat', async (req, res) => {
       model = 'gemini-3.5-flash', 
       temperature = 0.7, 
       customApiKey, 
-      useSearch = false 
+      useSearch = false,
+      engine = 'gemini',
+      ollamaHost
     } = req.body;
     
     if (!prompt && (!messages || messages.length === 0)) {
       return res.status(400).json({ status: 'error', message: 'No prompt or messages provided' });
     }
     
-    // Choose appropriate API Key: custom key provided via encrypted BYOK OR server env key
-    const apiKey = customApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'No API Key available. Please configure your custom API Key in settings, or ensure the server configuration is set up.' 
-      });
-    }
-    
-    // Initialize GoogleGenAI SDK as per the skill instructions
-    const ai = new GoogleGenAI({
-      apiKey: apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build'
-        }
-      }
+    const completion = await generateAICompletion({
+      engine,
+      model,
+      prompt,
+      messages,
+      systemInstruction,
+      temperature,
+      apiKey: customApiKey,
+      ollamaHost,
+      useSearch
     });
-    
-    // Determine target model
-    let targetModel = model;
-    if (model === 'gemini-flash') {
-      targetModel = 'gemini-flash-latest';
-    } else if (model === 'gemini-pro') {
-      targetModel = 'gemini-3.1-pro-preview';
-    } else if (model === 'gemini-lite') {
-      targetModel = 'gemini-3.1-flash-lite';
-    }
-    
-    const config: any = {
-      temperature: Number(temperature),
-    };
-    
-    if (systemInstruction) {
-      config.systemInstruction = systemInstruction;
-    }
-    
-    // Add web search capabilities (googleSearch tool) if requested
-    if (useSearch) {
-      config.tools = [{ googleSearch: {} }];
-    }
-    
-    // Let's build contents. Supports multiple turns conversation or single prompt
-    let contents: any = [];
-    if (messages && messages.length > 0) {
-      // Map standard format [{role: 'user'|'model', content: string}] -> SDK format
-      contents = messages.map((m: any) => ({
-        role: m.role === 'assistant' ? 'model' : m.role,
-        parts: [{ text: m.content }]
-      }));
-      
-      // If there is an immediate prompt to append, append it
-      if (prompt) {
-        contents.push({
-          role: 'user',
-          parts: [{ text: prompt }]
-        });
-      }
-    } else {
-      contents = prompt;
-    }
-    
-    const response = await ai.models.generateContent({
-      model: targetModel,
-      contents: contents,
-      config: config
-    });
-    
-    // Retrieve search grounding metadata if any details are returned
-    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
-    const searchQueries = groundingMetadata?.webSearchQueries || [];
-    const groundingChunks = groundingMetadata?.groundingChunks || [];
     
     res.json({
       status: 'success',
-      text: response.text,
-      model: targetModel,
-      searchUsed: useSearch,
-      grounding: {
-        queries: searchQueries,
-        links: groundingChunks.map((chunk: any) => ({
-          title: chunk.web?.title || 'Web Search Link',
-          uri: chunk.web?.uri || ''
-        })).filter((item: any) => item.uri)
-      }
+      text: completion.text,
+      model: completion.model,
+      searchUsed: !!completion.searchUsed,
+      grounding: completion.grounding || { queries: [], links: [] }
     });
   } catch (error: any) {
     console.error('Error during AI Chat Generation:', error);
